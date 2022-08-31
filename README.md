@@ -11,6 +11,11 @@ Afterwards just build the application with `go build sms-gateway.go` and run wit
 
 ### Running the SMS Service
 Get the `mux` dependency with `"github.com/gorilla/mux"` and simply build the application with `go build sms-svc.go` and run with `./sms-svc`
+Create a SMS in the following way:
+```shell
+curl -v -X POST http://localhost:8082/api/sms -H 'Content-Type: application/json' -d
+ '{"sender": "User1", "receiver": "User2", "message": "This is sms number 1"}'
+```
 
 ## Extra Information
 ### Possible future enhancements

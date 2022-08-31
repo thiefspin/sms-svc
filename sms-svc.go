@@ -2,13 +2,46 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"log"
 	"math"
 	"net/http"
-	"sms-svc/restutils"
 	"time"
 )
+
+type APIError struct {
+	StatusCode int    `json:"statusCode"`
+	Message    string `json:"message"`
+}
+
+func WithJsonDecoding(body io.ReadCloser, target any, w http.ResponseWriter, f func()) {
+	jsonErr := json.NewDecoder(body).Decode(&target)
+	if jsonErr != nil {
+		res := APIError{StatusCode: 400, Message: "Invalid JSON input"}
+		Respond(res, 400, w)
+	} else {
+		f()
+	}
+}
+
+func WithJsonEncoding(o any, f func(b *bytes.Buffer)) {
+	jsonObject, err := json.Marshal(o)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	f(bytes.NewBuffer(jsonObject))
+}
+
+func Respond(o any, statusCode int, w http.ResponseWriter) {
+	w.WriteHeader(statusCode)
+	WithJsonEncoding(o, func(b *bytes.Buffer) {
+		fmt.Fprintf(w, b.String())
+	})
+}
 
 type SMSRequest struct {
 	Sender   string `json:"sender"`
@@ -24,7 +57,7 @@ var smsQueue = make(chan SMSRequest, math.MaxInt16)
 
 func callSMSGateway(sms SMSRequest) bool {
 	success := true
-	utils.WithJsonEncoding(sms, func(b *bytes.Buffer) {
+	WithJsonEncoding(sms, func(b *bytes.Buffer) {
 		resp, err := http.Post("http://localhost:4000", "application/json", b)
 		if err != nil || resp.StatusCode == 429 {
 			log.Println("Failed to call SMS API")
@@ -39,14 +72,14 @@ func callSMSGateway(sms SMSRequest) bool {
 
 func create(w http.ResponseWriter, r *http.Request) {
 	var sms SMSRequest
-	utils.WithJsonDecoding(r.Body, &sms, w, func() {
+	WithJsonDecoding(r.Body, &sms, w, func() {
 		if !sms.valid() {
-			res := utils.APIError{StatusCode: 400, Message: "Invalid JSON input"}
-			utils.Respond(res, 400, w)
+			res := APIError{StatusCode: 400, Message: "Invalid JSON input"}
+			Respond(res, 400, w)
 		} else {
 			log.Println("Server received SMS request: ", sms)
 			smsQueue <- sms
-			utils.Respond(sms, 202, w)
+			Respond(sms, 202, w)
 		}
 	})
 }
